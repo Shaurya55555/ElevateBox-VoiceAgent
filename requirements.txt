@@ -1,0 +1,4 @@
+omnidimension
+python-dotenv
+requests
+flask
