@@ -105,8 +105,18 @@ def create_agent():
         name="Shaurya's Ecom Sales Agent",
         context_breakdown=CONTEXT_BREAKDOWN,
         welcome_message=WELCOME_MESSAGE,
+        # Verified live against the API 2026-08-23: sarvam voice_id=52
+        # ("Manisha" — warm/friendly, hindi+english tagged; Telugu coverage
+        # not confirmed by the provider listing, verify on a real test call)
+        # requires model.provider="openai" — sarvam's own LLM ("sarvam:
+        # sarvam-105b-conversations") returned 400: "not available for your
+        # organization" on this account's free tier.
+        voice={"provider": "sarvam", "voice_id": 52},
+        model={"provider": "openai", "model": "gpt-4o-mini"},
     )
-    agent_id = agent["json"]["agent"]["id"] if "json" in agent else agent["id"]
+    # client.post() wraps the raw API response as {"status":..., "json":...};
+    # verified live: json body is {"id":..., "name":..., "status":...} directly.
+    agent_id = agent["json"]["id"]
 
     for integration_id in integrations.values():
         client.integrations.add_integration_to_agent(agent_id, integration_id)
