@@ -1,4 +1,8 @@
-omnidimension
+fastapi
+uvicorn[standard]
+twilio
+google-cloud-speech
+google-cloud-texttospeech
+google-generativeai
 python-dotenv
 requests
-flask
