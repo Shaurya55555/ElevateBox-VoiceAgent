@@ -5,3 +5,4 @@ __pycache__/
 venv/
 google-credentials.json
 test_tts_*.wav
+callbacks.db

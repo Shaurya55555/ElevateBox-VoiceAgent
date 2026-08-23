@@ -8,117 +8,128 @@ callbacks from spoken time, and sends a post-call WhatsApp with real
 conversation context, a resume, a phone number, and an architecture image.
 No deck, no proposal — a working system, per their brief.
 
-## Stack — free tier only, no purchase
+## Stack — fully free, no purchase required anywhere
 
-Originally built on OmniDimension (bundled telephony+STT+LLM+TTS — see
-`omnidimension_reference/` for that version, and its README notes below for
-what was live-verified there), then rebuilt on a fully free stack since
-OmniDimension required buying a phone number ($5.06/month) with no free
-option. Nothing in the current stack requires paying anything:
+Third build. Two earlier attempts are kept for reference and to explain the
+path here:
 
-- **Twilio** (free trial) — telephony + Media Streams (real-time call audio
-  in/out over WebSocket). Trial accounts restrict outbound calls to numbers
-  *within your sign-up country* — sign up with Indian account details and
-  this becomes exactly what we want, calling 8688664337 for free using
-  trial credit (no card charged). You'll need to verify 8688664337 as a
-  caller ID via SMS (trial accounts require this).
-- **Google Cloud Speech-to-Text** (free tier, streaming) — Hindi primary,
-  Telugu/English as alternate language codes, `phone_call` model tuned for
-  telephony audio.
-- **Gemini API** (free tier, no card) — the conversation brain. Holds the
-  discovery flow, Hot/Warm/Cold classification, and calls the WhatsApp
-  actions itself via function calling (`llm_agent.py`).
-- **Google Cloud Text-to-Speech** (free tier) — genuinely supports Telugu
-  (`te-IN`) in addition to Hindi/English, output directly as MULAW/8kHz so
-  it matches Twilio's audio format with no transcoding.
-- **Meta WhatsApp Cloud API** (free in test mode for verified recipients) —
-  mid-call and post-call messages, including resume + architecture image
-  as attachments.
-- **FastAPI + WebSocket** (`app.py`) — the real-time bridge tying all of
-  the above together.
+- `omnidimension_reference/` — bundled telephony+STT+LLM+TTS, live-verified
+  against a real API key, abandoned because it required buying a phone
+  number ($5.06/month) with no free option.
+- `google_twilio_reference/` — hand-rolled Twilio Media Streams + Google
+  Cloud STT/TTS + Gemini. Abandoned because Twilio's free trial can only
+  call numbers *you* verify by receiving an SMS/voice code on that exact
+  number — 8688664337 belongs to ElevateBox, not Shaurya, so there's no way
+  to receive that code without paying to lift the trial restriction.
 
-**Honesty check on verification status:** the OmniDimension version's
-`agent_setup.py` was live-tested against a real API key (see
-`omnidimension_reference/`). This rewrite has **not** been run end-to-end —
-no Twilio/Google Cloud/Gemini credentials were available while writing it.
-It's built against stable, well-documented APIs (Twilio Media Streams
-protocol, `google-cloud-speech` StreamingRecognize, `google-cloud-texttospeech`
-MULAW output, Gemini automatic function calling), but test the pieces
-standalone (see below) before trusting a live call to work first try.
+Current stack, chosen specifically because every piece is free (not just a
+trial credit) or gated on something other than payment:
 
-## Setup — what only you can do (account creation)
+- **Exotel** (telephony) — trial restriction is **KYC** (identity document
+  verification), not destination-number verification. Once approved, it
+  can call any number, including 8688664337, using ₹1000 free trial credit.
+- **Vapi** (orchestration) — $10 free credit, no card required at signup.
+  Handles the two hardest engineering problems named in the brief: low-
+  latency turn-taking with interruption handling, and mid-call tool calls
+  without blocking the audio stream. Configured in BYOK mode so it uses our
+  own Deepgram/Groq/Gemini keys and Exotel telephony rather than billing
+  through Vapi's own default providers.
+- **Deepgram** (STT: Nova-3, TTS: Aura-2) — $200 free credit, no card,
+  never expires. Nova-3 handles Hindi/Telugu/English and code-switching in
+  `language=multi` mode.
+- **Groq** (fast in-conversation LLM turns) — free, no card, used for the
+  live back-and-forth where latency matters most.
+- **Gemini API** (extraction/classification) — free tier, no card, used
+  between turns for the heavier structured work (budget/timeline/features
+  extraction, Hot/Warm/Cold classification) via `decision_engine.py`.
+- **Meta WhatsApp Cloud API** — free for service messages within the
+  24-hour window opened by the call; used for both the mid-call Hot-lead
+  alert and the post-call follow-up.
+- **FastAPI** (`app.py`) — receives Vapi's tool-call and end-of-call
+  webhooks; this is where classification, WhatsApp sends, and scheduling
+  actually happen.
+- **SQLite** (`scheduler.py`) — one table for booked callbacks.
 
-1. **Twilio** — sign up at twilio.com with Indian account details. Get a
-   trial number (deducted from trial credit, not a real charge) and verify
-   **8688664337** as a caller ID (Twilio Console → Phone Numbers → Verified
-   Caller IDs → SMS verification). Gives you `TWILIO_ACCOUNT_SID`,
-   `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
-2. **Google Cloud** — create a project (free, no charge without exceeding
-   free tier), enable the Speech-to-Text and Text-to-Speech APIs, create a
-   service account, download its JSON key → `GOOGLE_APPLICATION_CREDENTIALS`
-   pointing at that file.
-3. **Gemini API key** — https://aistudio.google.com/apikey (free, no card)
-   → `GEMINI_API_KEY`.
-4. **Meta WhatsApp Business API** — Meta Business account + WhatsApp
+**Honesty check on verification status:** none of this has been run
+end-to-end yet — no Vapi/Exotel/Deepgram/Groq/Gemini/Meta credentials exist
+yet (accounts are being created in parallel; Exotel needs KYC approval,
+1-2 business days). Vapi's exact server-webhook payload shape in
+`app.py`/`vapi_setup.py` is written from documented spec, not verified
+against a live call — check it against a real webhook payload during step 2
+of the build order below before trusting it.
+
+## Setup — what only you (Shaurya) can do (account creation, KYC, payment info)
+
+1. **Exotel** — sign up at exotel.com (free, instant). Submit KYC (PAN
+   card is normally enough for an individual account) as early as possible
+   — it's the longest lead time in this stack. → `EXOTEL_SID`,
+   `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN`, `EXOTEL_EXOPHONE` (from Numbers →
+   Exophones once approved).
+2. **Vapi** — sign up at vapi.ai (free, no card for the $10 credit). Get an
+   API key from the dashboard → `VAPI_API_KEY`.
+3. **Deepgram** — sign up at deepgram.com/console (free, no card). Get an
+   API key → `DEEPGRAM_API_KEY`.
+4. **Groq** — sign up at console.groq.com (free, no card) → `GROQ_API_KEY`.
+5. **Gemini** — https://aistudio.google.com/apikey (free, no card) →
+   `GEMINI_API_KEY`.
+6. **Meta WhatsApp Business API** — Meta Business account + WhatsApp
    Business API app at developers.facebook.com. API Setup page gives a test
-   number + Phone Number ID + temporary access token. Add 8688664337 as a
-   verified test recipient there → `META_WA_PHONE_NUMBER_ID`,
-   `META_WA_ACCESS_TOKEN`.
-5. **ngrok** (or any HTTPS tunnel) — `ngrok http 8000` once `app.py` is
+   number + Phone Number ID + temporary access token. Add the interim test
+   number (+91-7985200306) as a verified test recipient there, later add
+   8688664337 → `META_WA_PHONE_NUMBER_ID`, `META_WA_ACCESS_TOKEN`.
+7. **ngrok** (or any HTTPS tunnel) — `ngrok http 8000` once `app.py` is
    running → `WEBHOOK_BASE_URL`.
 
-## Test the pieces standalone first
+## Run order
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # fill in every value
+cp .env.example .env   # fill in every value as accounts come online
 
-# Conversation logic only — no telephony needed, just GEMINI_API_KEY.
-# Type as if you were the caller; confirms discovery/classification/WhatsApp
-# tool calls work before any audio is involved.
-python test_gemini_agent.py
-
-# TTS credentials + Telugu/Hindi/English voice check — writes playable WAVs.
-python test_tts.py
-```
-
-## Run the real thing
-
-```bash
-# 1. Start the bridge server
+# 1. Start the backend that Vapi's webhooks hit
 uvicorn app:app --host 0.0.0.0 --port 8000
 
 # 2. Tunnel it, put the forwarding URL in .env as WEBHOOK_BASE_URL
 ngrok http 8000
 
-# 3. Place the call
+# 3. Create/update the Vapi assistant (rerun after editing agent_prompt.md
+#    or the tool definitions in vapi_setup.py)
+python vapi_setup.py
+# copy the printed assistant id into .env as VAPI_ASSISTANT_ID
+
+# 4. Place a call — defaults to the interim test number
+#    (+91-7985200306) while Exotel KYC is pending; pass 8688664337
+#    explicitly once Exotel is approved and VAPI_PHONE_NUMBER_ID is set
+#    to the Exotel-backed Vapi number
 python dispatch_call.py
+python dispatch_call.py +918688664337
 ```
 
 ## Files
 
 - `agent_prompt.md` — the conversational design in full prose (source of
-  truth for `SYSTEM_PROMPT` in `llm_agent.py`): welcome message, discovery
-  questions, Hot/Warm/Cold classification logic, WhatsApp message templates.
-- `llm_agent.py` — Gemini chat session with automatic function calling;
-  `send_midcall_whatsapp` / `send_followup_whatsapp` are real Python
-  functions Gemini can call directly mid-conversation.
-- `app.py` — FastAPI server: `/twiml` (Twilio fetches this on call connect)
-  and `/media-stream` (WebSocket bridging Twilio audio ↔ Google STT ↔
-  Gemini ↔ Google TTS).
-- `dispatch_call.py` — triggers the outbound call to 8688664337 via Twilio.
+  truth for the system prompt built in `vapi_setup.py`): welcome message,
+  discovery questions, Hot/Warm/Cold classification logic, WhatsApp message
+  templates.
+- `vapi_setup.py` — creates/updates the Vapi assistant via API: model
+  (Groq), voice (Deepgram Aura-2), transcriber (Deepgram Nova-3, multi-
+  language), tool definitions (`extract_and_classify`, `schedule_callback`),
+  `serverUrl` pointing at `app.py`.
+- `app.py` — FastAPI server handling Vapi's webhooks: `tool-calls` (runs
+  classification, fires the mid-call WhatsApp) and `end-of-call-report`
+  (composes and sends the post-call WhatsApp).
+- `decision_engine.py` — Gemini-based extraction/classification
+  (`classify`) and spoken-time parsing (`parse_callback_time`).
+- `scheduler.py` — SQLite-backed callback table.
+- `dispatch_call.py` — triggers an outbound call via the Vapi API.
 - `whatsapp.py` — thin Meta Cloud API client (text/document/image sends).
-- `test_gemini_agent.py`, `test_tts.py` — standalone verification, no
-  telephony required.
 - `architecture.md` — text spec for the required architecture diagram;
   export/draw it as `architecture.png` once the flow is confirmed working,
   and point `ARCHITECTURE_IMAGE_URL` at its raw GitHub URL.
 - `resume.pdf` — Shaurya's resume, sent as a WhatsApp document attachment
   via its raw GitHub URL (`RESUME_PUBLIC_URL`).
-- `omnidimension_reference/` — the original OmniDimension-based build
-  (live-verified agent creation against a real API key, abandoned only
-  because it required a paid phone number). Useful if the free stack hits
-  a wall and paying $5/month becomes worth it.
+- `omnidimension_reference/`, `google_twilio_reference/` — the two earlier
+  abandoned builds, kept for reference (see their own READMEs for why).
 
 ## What to submit to ElevateBox (per their Section 06 + closing checklist)
 
