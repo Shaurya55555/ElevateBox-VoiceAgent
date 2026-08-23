@@ -1,33 +1,41 @@
-"""
-Places the outbound call via Twilio. Twilio then fetches TwiML from
-/twiml on our own server (app.py), which connects the call's audio to
-/media-stream over WebSocket.
-
-Usage:
-    python dispatch_call.py
+"""Trigger an outbound call via Vapi. Target number is a config value —
+swap TARGET_NUMBER (or pass one on the command line) once Exotel KYC
+clears and the assistant is calling a real telephony number.
 """
 
 import os
+import sys
 
+import requests
 from dotenv import load_dotenv
-from twilio.rest import Client
 
 load_dotenv()
 
-TARGET_NUMBER = os.environ.get("TARGET_PHONE_NUMBER", "+918688664337")
+VAPI_API_KEY = os.environ["VAPI_API_KEY"]
+ASSISTANT_ID = os.environ["VAPI_ASSISTANT_ID"]
+PHONE_NUMBER_ID = os.environ["VAPI_PHONE_NUMBER_ID"]
+
+DEFAULT_TARGET = os.environ.get("TARGET_PHONE_NUMBER", "+917985200306")
 
 
-def dispatch():
-    client = Client(os.environ["TWILIO_ACCOUNT_SID"], os.environ["TWILIO_AUTH_TOKEN"])
-    webhook_base = os.environ["WEBHOOK_BASE_URL"].rstrip("/")
-    call = client.calls.create(
-        to=TARGET_NUMBER,
-        from_=os.environ["TWILIO_FROM_NUMBER"],
-        url=f"{webhook_base}/twiml",
+def dispatch(target_number: str):
+    resp = requests.post(
+        "https://api.vapi.ai/call",
+        headers={
+            "Authorization": f"Bearer {VAPI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "assistantId": ASSISTANT_ID,
+            "phoneNumberId": PHONE_NUMBER_ID,
+            "customer": {"number": target_number},
+        },
+        timeout=30,
     )
-    print("Call SID:", call.sid, "status:", call.status)
-    return call
+    resp.raise_for_status()
+    print(resp.json())
 
 
 if __name__ == "__main__":
-    dispatch()
+    target = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_TARGET
+    dispatch(target)

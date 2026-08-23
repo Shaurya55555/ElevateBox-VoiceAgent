@@ -1,52 +1,68 @@
 # Architecture (spec for the required diagram image)
 
-Free-tier stack (switched from OmniDimension — see `omnidimension_reference/`
-for that version, kept for reference): Twilio for telephony/Media Streams,
-Google Cloud STT/TTS, Gemini for the conversation brain, Meta WhatsApp
-Cloud API for messaging. All own-account free tiers, no purchase.
+Fully free stack (third rebuild — see `omnidimension_reference/` and
+`google_twilio_reference/` for the two abandoned attempts and why): **Vapi**
+for call orchestration (turn-taking, interruption, STT/LLM/TTS loop,
+mid-call tool calls), **Exotel** for telephony (KYC-gated, not
+destination-verification-gated — can call 8688664337 once approved, unlike
+Twilio's trial), **Deepgram** for STT (Nova-3) and TTS (Aura-2), **Groq**
+for fast in-turn LLM replies, **Gemini** for the heavier extraction/
+classification step, **Meta WhatsApp Cloud API** for messaging. All
+own-account free tiers.
 
 Flow, left to right / top to bottom:
 
 ```
-[dispatch_call.py: Twilio outbound call to 8688664337]
+[dispatch_call.py: POST /call to Vapi API, assistantId + phoneNumberId
+ (Exotel-backed) + target number]
               |
               v
-   [Twilio fetches TwiML from /twiml, connects
-    call audio to /media-stream over WebSocket]
-              |
-              v
-        [app.py: real-time bridge]
-   audio in -> Google STT (streaming, hi-IN +
-   alt te-IN/en-IN) -> transcript -> Gemini
-   (llm_agent.ConversationSession) -> reply text
-   -> Google TTS (MULAW/8kHz) -> audio out
+   [Vapi: manages the live call session end-to-end —
+    telephony leg via Exotel, turn-taking, interruption
+    handling, STT -> LLM -> TTS loop]
               |
    +----------+-----------+
    |                      |
-[Discovery]          [Language detect
- budget/products/      + code-switch
- timeline/features       via STT alt-lang]
-   |
-   v
-[Classification: Hot / Warm / Cold — decided by Gemini,
- per agent_prompt.md / llm_agent.SYSTEM_PROMPT]
-   |
-   +--- Hot ---> [Gemini calls send_midcall_whatsapp() tool
-   |              -> whatsapp.py -> Meta Cloud API,
-   |              fires while call is still live]
-   |
-   +--- Warm --> [Callback time resolved by Gemini from
-   |              speech, passed to send_followup_whatsapp]
-   |
-   +--- Cold --> [Log + disengage politely]
+[Deepgram Nova-3 STT   [Deepgram Aura-2 TTS
+ language=multi, ->     -> spoken reply]
+ handles Hindi/Telugu/
+ English + code-switch]
               |
               v
-      [Call ends]
+   [Groq llama-3.3-70b: fast in-conversation
+    turn replies, per SYSTEM_PROMPT built from
+    agent_prompt.md — discovery questions, sales pitch]
+              |
+              v (assistant calls a tool mid-conversation)
+   [Vapi POSTs to app.py: /vapi/webhook, type=tool-calls]
               |
               v
-   [Gemini calls send_followup_whatsapp() tool ->
-    context from conversation + resume + phone
-    number + architecture image, via Meta Cloud API]
+   [decision_engine.py: Gemini classifies the transcript
+    so far -> budget/products/timeline/features + Hot/Warm/Cold]
+              |
+   +--- Hot ---> [app.py fires whatsapp.send_text() to the
+   |              caller NOW, via Meta Cloud API — call
+   |              keeps running, this doesn't block audio]
+   |
+   +--- Warm --> [schedule_callback tool -> decision_engine
+   |              parses the spoken time -> scheduler.py
+   |              writes {caller, requested_time, barrier}
+   |              to SQLite]
+   |
+   +--- Cold --> [logged via the same classify call, no
+                  aggressive action]
+              |
+              v
+        [Call ends]
+              |
+              v
+   [Vapi POSTs to app.py: /vapi/webhook, type=end-of-call-report,
+    includes full transcript]
+              |
+              v
+   [app.py composes post-call WhatsApp from stored per-call
+    facts (or a transcript fallback) + sends resume.pdf +
+    architecture image, all via whatsapp.py -> Meta Cloud API]
 ```
 
 Once a real test call is run, replace this text spec with an actual
