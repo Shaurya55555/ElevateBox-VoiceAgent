@@ -32,6 +32,8 @@ def dispatch(target_number: str):
         },
         timeout=30,
     )
+    if not resp.ok:
+        print(resp.status_code, resp.text)
     resp.raise_for_status()
     print(resp.json())
 

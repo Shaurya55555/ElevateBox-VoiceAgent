@@ -50,13 +50,43 @@ trial credit) or gated on something other than payment:
   actually happen.
 - **SQLite** (`scheduler.py`) — one table for booked callbacks.
 
-**Honesty check on verification status:** none of this has been run
-end-to-end yet — no Vapi/Exotel/Deepgram/Groq/Gemini/Meta credentials exist
-yet (accounts are being created in parallel; Exotel needs KYC approval,
-1-2 business days). Vapi's exact server-webhook payload shape in
-`app.py`/`vapi_setup.py` is written from documented spec, not verified
-against a live call — check it against a real webhook payload during step 2
-of the build order below before trusting it.
+**Honesty check on verification status (updated 2026-08-24):**
+
+Verified live:
+- Backend deployed and running at
+  https://elevatebox-voice-agent-zeaa.onrender.com (Render free tier).
+- `decision_engine.classify()` — tested against the live Gemini API with a
+  real transcript, correctly extracted budget/products/timeline and
+  classified Hot.
+- `/vapi/webhook` `tool-calls` handling — tested with simulated Vapi
+  payloads for both `extract_and_classify` and `schedule_callback`;
+  classification and datetime parsing both worked correctly
+  ("tomorrow morning around 10" resolved to the correct next-day date).
+  The WhatsApp send failed as expected (no access token set yet) and
+  degraded gracefully — returned the error alongside the classification
+  instead of crashing the call.
+- `/vapi/webhook` `end-of-call-report` handling — tested with a simulated
+  payload, returned 200 without error.
+- Vapi assistant created via `vapi_setup.py` against the real Vapi API
+  (id in `.env` as `VAPI_ASSISTANT_ID`), with `serverUrl` pointed at the
+  live Render backend.
+
+Not yet verified:
+- A real phone call end-to-end. The free Vapi phone number provisioned for
+  interim testing **cannot place international calls**, so it can't reach
+  either the interim test number (+91 7985200306) or the final target
+  (8688664337) — real calling requires the Exotel number once KYC clears.
+- Meta WhatsApp sends — account exists, phone number ID is set, but Meta
+  is requiring a payment method on file before the access token/test
+  number can be finalized (still in progress).
+- Exotel KYC — documents submitted, status "Not Verified" (pending
+  manual review as of 2026-08-24).
+
+Known limitation to fix before final submission: `scheduler.py` uses
+SQLite on Render's free tier, which has an **ephemeral filesystem** —
+`callbacks.db` resets on every redeploy/restart. Fine for a single demo
+session, but swap for Render's free Postgres tier before relying on
+callbacks surviving a restart.
 
 ## Setup — what only you (Shaurya) can do (account creation, KYC, payment info)
 
