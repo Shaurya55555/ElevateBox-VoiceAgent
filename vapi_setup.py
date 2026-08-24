@@ -95,7 +95,7 @@ ASSISTANT_CONFIG = {
     },
     "voice": {
         "provider": "deepgram",
-        "voiceId": "aura-2-thalia-en",
+        "voiceId": "luna",
     },
     "transcriber": {
         "provider": "deepgram",
@@ -132,6 +132,8 @@ def create_or_update_assistant():
             json=ASSISTANT_CONFIG,
             timeout=30,
         )
+    if not resp.ok:
+        print(resp.status_code, resp.text)
     resp.raise_for_status()
     data = resp.json()
     print(json.dumps(data, indent=2))
