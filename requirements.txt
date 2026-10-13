@@ -3,3 +3,4 @@ uvicorn[standard]
 google-generativeai
 python-dotenv
 requests
+psycopg2-binary

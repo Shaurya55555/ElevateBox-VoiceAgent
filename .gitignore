@@ -6,3 +6,6 @@ venv/
 google-credentials.json
 test_tts_*.wav
 callbacks.db
+docs/tts_samples/
+docs/stt_samples/*.wav
+.pytest_cache/

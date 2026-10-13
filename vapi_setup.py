@@ -17,10 +17,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 VAPI_API_KEY = os.environ["VAPI_API_KEY"]
+# llama-3.3-70b-versatile was retired from Groq; this is a model Groq lists
+# with tool calling. Override with GROQ_MODEL if it is retired in turn.
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 SERVER_URL = os.environ["WEBHOOK_BASE_URL"].rstrip("/") + "/vapi/webhook"
 
-with open("agent_prompt.md", encoding="utf-8") as f:
-    AGENT_DESIGN_NOTES = f.read()
+# Groq's free tier allows about 8,000 tokens per minute per model, and the
+# whole prompt is re-sent on every turn. Send only the sections the live
+# model needs; the welcome message is the assistant's firstMessage and the
+# post-call text is composed by app.py.
+RUNTIME_SECTIONS = ("Persona", "Language", "Discovery", "Classification",
+                    "Mid-call action", "Conversation rules")
+
+
+def _runtime_notes(path="agent_prompt.md") -> str:
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    nl = chr(10)
+    head, *parts = text.split(nl + "## ")
+    # the persona paragraph that sits before the first "## " header
+    keep = [head.split(nl, 1)[-1].strip()]
+    for part in parts:
+        title = part.split(nl, 1)[0]
+        if any(name in title for name in RUNTIME_SECTIONS):
+            keep.append("## " + part.strip())
+    return (nl + nl).join(k for k in keep if k)
+
+
+AGENT_DESIGN_NOTES = _runtime_notes()
 
 SYSTEM_PROMPT = f"""You are Ananya, calling on behalf of Shaurya Bajpai to \
 pitch e-commerce website development services. Follow this design closely; \
@@ -89,8 +114,10 @@ ASSISTANT_CONFIG = {
     "name": "ElevateBox Sales Agent",
     "model": {
         "provider": "groq",
-        "model": "llama-3.3-70b-versatile",
+        "model": GROQ_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}],
+        "maxTokens": 200,
+        "temperature": 0.4,
         "tools": TOOLS,
     },
     "voice": {
@@ -103,6 +130,9 @@ ASSISTANT_CONFIG = {
         "language": "multi",
     },
     "serverUrl": SERVER_URL,
+    # Barge-in: Vapi stops speaking once the caller says this many words
+    # (or speaks for this long), then waits before resuming.
+    "stopSpeakingPlan": {"numWords": 2, "voiceSeconds": 0.2, "backoffSeconds": 1.0},
     "firstMessage": (
         "Hi, this is Ananya calling on behalf of Shaurya — is this a good time? "
         "I help people get an e-commerce website built, quickly and properly. "
@@ -110,6 +140,10 @@ ASSISTANT_CONFIG = {
     ),
     "backgroundSound": "office",
 }
+
+
+if WEBHOOK_SECRET:
+    ASSISTANT_CONFIG["server"] = {"url": SERVER_URL, "secret": WEBHOOK_SECRET}
 
 
 def create_or_update_assistant():

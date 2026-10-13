@@ -1,180 +1,136 @@
-# ElevateBox SDE Intern Assignment
+# ElevateBox voice sales agent
 
-Built for ElevateBox's (ElevateScale Technologies) SDE Intern hiring
-assignment: an AI voice agent that calls **8688664337** on its own, sells
-e-commerce website development in Telugu/Hindi/English, classifies the lead
-Hot/Warm/Cold in real time, fires a WhatsApp mid-call on high intent, books
-callbacks from spoken time, and sends a post-call WhatsApp with real
-conversation context, a resume, a phone number, and an architecture image.
-No deck, no proposal — a working system, per their brief.
+An outbound voice agent built for ElevateBox's (ElevateScale Technologies)
+SDE Intern assignment. It calls a lead, pitches e-commerce website
+development in Hindi, Telugu or English, classifies the lead Hot, Warm or
+Cold as the conversation goes, sends a WhatsApp while the call is still live
+when intent is high, books a callback from a spoken time, and sends a
+post-call WhatsApp with the real context of the conversation, a resume, a
+phone number and an architecture image.
 
-## Stack — fully free, no purchase required anywhere
+![architecture](architecture.png)
 
-Third build. Two earlier attempts are kept for reference and to explain the
-path here:
+## Verification status (read this first)
 
-- `omnidimension_reference/` — bundled telephony+STT+LLM+TTS, live-verified
-  against a real API key, abandoned because it required buying a phone
-  number ($5.06/month) with no free option.
-- `google_twilio_reference/` — hand-rolled Twilio Media Streams + Google
-  Cloud STT/TTS + Gemini. Abandoned because Twilio's free trial can only
-  call numbers *you* verify by receiving an SMS/voice code on that exact
-  number — 8688664337 belongs to ElevateBox, not Shaurya, so there's no way
-  to receive that code without paying to lift the trial restriction.
+Stated as of 2026-10-13. Nothing is claimed that has not been run.
 
-Current stack, chosen specifically because every piece is free (not just a
-trial credit) or gated on something other than payment:
+| Area | Status | Evidence |
+|---|---|---|
+| Backend deployed | Verified | https://elevatebox-voice-agent-zeaa.onrender.com `/health` |
+| Webhook logic (tool calls, end of call, idempotency, secret check) | Verified with simulated payloads | `tests/test_webhooks.py`, 27 tests in `tests/` |
+| WhatsApp client (retry, template fallback) | Verified against a mocked Meta API only | `tests/test_whatsapp.py` |
+| Gemini classification | Verified live on synthetic transcripts | `docs/classification_eval.md` |
+| Prompt behaviour | Text simulation only, not voice | `docs/stress_results_baseline.md`, `docs/prompt_changelog.md` |
+| Vapi assistant | Created and updated through the real API | `vapi_setup.py` |
+| A real phone call | **Not yet done** | Needs an Exotel ExoPhone (KYC) |
+| A real WhatsApp delivery | **Not yet done** | Needs a Meta access token and payment method |
+| Approved WhatsApp templates | **Not yet submitted** | `docs/whatsapp_templates.md` |
+| STT accuracy on real speech | **Not measured** | harness in `tools/stt_tts_compare.py` |
+| Hindi and Telugu speech quality | **Weak** with the current voices | `docs/stt_tts_comparison.md` |
 
-- **Exotel** (telephony) — trial restriction is **KYC** (identity document
-  verification), not destination-number verification. Once approved, it
-  can call any number, including 8688664337, using ₹1000 free trial credit.
-- **Vapi** (orchestration) — $10 free credit, no card required at signup.
-  Handles the two hardest engineering problems named in the brief: low-
-  latency turn-taking with interruption handling, and mid-call tool calls
-  without blocking the audio stream. Configured in BYOK mode so it uses our
-  own Deepgram/Groq/Gemini keys and Exotel telephony rather than billing
-  through Vapi's own default providers.
-- **Deepgram** (STT: Nova-3, TTS: Aura-2) — $200 free credit, no card,
-  never expires. Nova-3 handles Hindi/Telugu/English and code-switching in
-  `language=multi` mode.
-- **Groq** (fast in-conversation LLM turns) — free, no card, used for the
-  live back-and-forth where latency matters most.
-- **Gemini API** (extraction/classification) — free tier, no card, used
-  between turns for the heavier structured work (budget/timeline/features
-  extraction, Hot/Warm/Cold classification) via `decision_engine.py`.
-- **Meta WhatsApp Cloud API** — free for service messages within the
-  24-hour window opened by the call; used for both the mid-call Hot-lead
-  alert and the post-call follow-up.
-- **FastAPI** (`app.py`) — receives Vapi's tool-call and end-of-call
-  webhooks; this is where classification, WhatsApp sends, and scheduling
-  actually happen.
-- **SQLite** (`scheduler.py`) — one table for booked callbacks.
+## How it works
 
-**Honesty check on verification status (updated 2026-08-24):**
+1. `dispatch_call.py` asks Vapi to place an outbound call through the
+   Exotel-backed number.
+2. Vapi runs the live loop: Deepgram Nova-3 transcribes, a Groq model
+   replies from the prompt in `agent_prompt.md`, Deepgram Aura-2 speaks.
+   Vapi handles turn-taking and interruption (barge-in); the stop plan is
+   set in `vapi_setup.py`. This service does not touch the audio.
+3. When the model calls a tool, Vapi POSTs to `/vapi/webhook`
+   (`tool-calls`):
+   - `extract_and_classify`: `decision_engine.py` (Gemini) extracts budget,
+     product, catalog size, timeline and features, and returns Hot, Warm or
+     Cold. On the first Hot, a WhatsApp goes out immediately.
+   - `schedule_callback`: the spoken time is resolved to a datetime and
+     stored in `scheduler.py`.
+4. When the call ends, Vapi POSTs `end-of-call-report`. The service sends the
+   post-call WhatsApp (text, resume, architecture image).
 
-Verified live:
-- Backend deployed and running at
-  https://elevatebox-voice-agent-zeaa.onrender.com (Render free tier).
-- `decision_engine.classify()` — tested against the live Gemini API with a
-  real transcript, correctly extracted budget/products/timeline and
-  classified Hot.
-- `/vapi/webhook` `tool-calls` handling — tested with simulated Vapi
-  payloads for both `extract_and_classify` and `schedule_callback`;
-  classification and datetime parsing both worked correctly
-  ("tomorrow morning around 10" resolved to the correct next-day date).
-  The WhatsApp send failed as expected (no access token set yet) and
-  degraded gracefully — returned the error alongside the classification
-  instead of crashing the call.
-- `/vapi/webhook` `end-of-call-report` handling — tested with a simulated
-  payload, returned 200 without error.
-- Vapi assistant created via `vapi_setup.py` against the real Vapi API
-  (id in `.env` as `VAPI_ASSISTANT_ID`), with `serverUrl` pointed at the
-  live Render backend.
+Reliability behaviour:
 
-Not yet verified:
-- A real phone call end-to-end. The free Vapi phone number provisioned for
-  interim testing **cannot place international calls**, so it can't reach
-  either the interim test number (+91 7985200306) or the final target
-  (8688664337) — real calling requires the Exotel number once KYC clears.
-- Meta WhatsApp sends — account exists, phone number ID is set, but Meta
-  is requiring a payment method on file before the access token/test
-  number can be finalized (still in progress).
-- Exotel KYC — documents submitted, status "Not Verified" (pending
-  manual review as of 2026-08-24).
+- A repeated tool call (same `toolCallId`) returns the stored result and
+  does not send a second WhatsApp.
+- The end-of-call report is processed once per call id, and a failed send is
+  not marked processed, so a retry can try again.
+- WhatsApp sends retry on 429 and 5xx with backoff, never on other 4xx.
+- Outside the 24-hour window, a free-form send is rejected by Meta (error
+  131047) and the code falls back to an approved template.
+- Callbacks and idempotency keys use Postgres when `DATABASE_URL` is set and
+  SQLite otherwise.
+- Every step logs one JSON line with the call id.
+- If `WEBHOOK_SECRET` is set, requests without the matching `X-Vapi-Secret`
+  header get 401.
 
-Known limitation to fix before final submission: `scheduler.py` uses
-SQLite on Render's free tier, which has an **ephemeral filesystem** —
-`callbacks.db` resets on every redeploy/restart. Fine for a single demo
-session, but swap for Render's free Postgres tier before relying on
-callbacks surviving a restart.
+## Stack
 
-## Setup — what only you (Shaurya) can do (account creation, KYC, payment info)
+Vapi (orchestration), Exotel (telephony), Deepgram Nova-3 (STT) and Aura-2
+(TTS), Groq (live replies, model set by `GROQ_MODEL`, default
+`openai/gpt-oss-120b`), Gemini 2.5 Flash (classification and time parsing),
+Meta WhatsApp Cloud API, FastAPI, SQLite or Postgres, deployed on Render.
 
-1. **Exotel** — sign up at exotel.com (free, instant). Submit KYC (PAN
-   card is normally enough for an individual account) as early as possible
-   — it's the longest lead time in this stack. → `EXOTEL_SID`,
-   `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN`, `EXOTEL_EXOPHONE` (from Numbers →
-   Exophones once approved).
-2. **Vapi** — sign up at vapi.ai (free, no card for the $10 credit). Get an
-   API key from the dashboard → `VAPI_API_KEY`.
-3. **Deepgram** — sign up at deepgram.com/console (free, no card). Get an
-   API key → `DEEPGRAM_API_KEY`.
-4. **Groq** — sign up at console.groq.com (free, no card) → `GROQ_API_KEY`.
-5. **Gemini** — https://aistudio.google.com/apikey (free, no card) →
-   `GEMINI_API_KEY`.
-6. **Meta WhatsApp Business API** — Meta Business account + WhatsApp
-   Business API app at developers.facebook.com. API Setup page gives a test
-   number + Phone Number ID + temporary access token. Add the interim test
-   number (+91-7985200306) as a verified test recipient there, later add
-   8688664337 → `META_WA_PHONE_NUMBER_ID`, `META_WA_ACCESS_TOKEN`.
-7. **ngrok** (or any HTTPS tunnel) — `ngrok http 8000` once `app.py` is
-   running → `WEBHOOK_BASE_URL`.
+Two earlier builds are kept for reference with notes on why they were
+abandoned: `omnidimension_reference/` and `google_twilio_reference/`.
 
-## Run order
+## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # fill in every value as accounts come online
-
-# 1. Start the backend that Vapi's webhooks hit
-uvicorn app:app --host 0.0.0.0 --port 8000
-
-# 2. Tunnel it, put the forwarding URL in .env as WEBHOOK_BASE_URL
-ngrok http 8000
-
-# 3. Create/update the Vapi assistant (rerun after editing agent_prompt.md
-#    or the tool definitions in vapi_setup.py)
-python vapi_setup.py
-# copy the printed assistant id into .env as VAPI_ASSISTANT_ID
-
-# 4. Place a call — defaults to the interim test number
-#    (+91-7985200306) while Exotel KYC is pending; pass 8688664337
-#    explicitly once Exotel is approved and VAPI_PHONE_NUMBER_ID is set
-#    to the Exotel-backed Vapi number
-python dispatch_call.py
-python dispatch_call.py +918688664337
+cp .env.example .env        # fill in the values, never commit .env
+pip install -r requirements-dev.txt
+pytest                      # 27 tests, no network or keys needed
+uvicorn app:app --port 8000
+python vapi_setup.py        # create/update the assistant, copy the id into .env
+python dispatch_call.py +91XXXXXXXXXX
+python tools/fetch_call.py <call_id> --label "Hindi hot lead"
 ```
 
-## Files
+Accounts only the owner can create: Exotel KYC and an ExoPhone
+(`EXOTEL_EXOPHONE`), Meta WhatsApp access token and payment method
+(`META_WA_ACCESS_TOKEN`), and template approvals
+(`docs/whatsapp_templates.md`).
 
-- `agent_prompt.md` — the conversational design in full prose (source of
-  truth for the system prompt built in `vapi_setup.py`): welcome message,
-  discovery questions, Hot/Warm/Cold classification logic, WhatsApp message
-  templates.
-- `vapi_setup.py` — creates/updates the Vapi assistant via API: model
-  (Groq), voice (Deepgram Aura-2), transcriber (Deepgram Nova-3, multi-
-  language), tool definitions (`extract_and_classify`, `schedule_callback`),
-  `serverUrl` pointing at `app.py`.
-- `app.py` — FastAPI server handling Vapi's webhooks: `tool-calls` (runs
-  classification, fires the mid-call WhatsApp) and `end-of-call-report`
-  (composes and sends the post-call WhatsApp).
-- `decision_engine.py` — Gemini-based extraction/classification
-  (`classify`) and spoken-time parsing (`parse_callback_time`).
-- `scheduler.py` — SQLite-backed callback table.
-- `dispatch_call.py` — triggers an outbound call via the Vapi API.
-- `whatsapp.py` — thin Meta Cloud API client (text/document/image sends).
-- `architecture.md` — text spec for the required architecture diagram;
-  export/draw it as `architecture.png` once the flow is confirmed working,
-  and point `ARCHITECTURE_IMAGE_URL` at its raw GitHub URL.
-- `resume.pdf` — Shaurya's resume, sent as a WhatsApp document attachment
-  via its raw GitHub URL (`RESUME_PUBLIC_URL`).
-- `omnidimension_reference/`, `google_twilio_reference/` — the two earlier
-  abandoned builds, kept for reference (see their own READMEs for why).
+## Repository map
 
-## What to submit to ElevateBox (per their Section 06 + closing checklist)
+- `app.py`: FastAPI webhooks. `messages.py`: WhatsApp text. `whatsapp.py`:
+  Meta client. `decision_engine.py`: Gemini extraction and classification.
+  `scheduler.py`: callbacks and idempotency store.
+- `agent_prompt.md`: the conversation design and rules, the source of the
+  system prompt built in `vapi_setup.py`.
+- `tools/`: `make_architecture.py`, `stress_text.py`, `classification_eval.py`,
+  `stt_tts_compare.py`, `fetch_call.py`.
+- `docs/`: evaluation reports, `prompt_changelog.md`, `whatsapp_templates.md`,
+  `test_calls/` (artifacts of real calls, empty until a call is made).
+- `tests/`: pytest suite.
 
-WhatsApp all of this to **8688664337**:
+## Known limitations
 
-1. The working prototype — trigger a live call on demand (or the fact that
-   it just called them, if timed live).
-2. A one-page architecture diagram, image or PDF (`architecture.png`,
-   hand-drawn is explicitly fine per their brief).
-3. A short note, **under 200 words**: what works, what doesn't, what you'd
-   build next.
-4. Your resume (`resume.pdf`).
-5. Your mobile number.
-6. A repo link, if you have one — this repo.
+- No real call or real WhatsApp delivery has happened yet (see status table).
+- The Vapi webhook field names were written from the spec and exercised with
+  simulated payloads. A real call may reveal differences.
+- The Aura-2 voices are English voices. Hindi and Telugu replies are only
+  partly intelligible (see `docs/stt_tts_comparison.md`). A provider with
+  real Hindi and Telugu voices is needed before claiming those languages
+  work on a call.
+- The Groq key on this project is limited to 8,000 tokens per minute per
+  model, and the prompt is re-sent every turn. A fast conversation with tool
+  calls can hit that cap. The runtime prompt is trimmed to the sections the
+  live model needs and replies are capped at 200 tokens, but a paid or dev
+  tier is the real fix for a live demo.
+- Stress results are from a text simulation graded by an LLM, not from
+  voice calls, and the synthetic classification set is not real call data.
+- Attachments (resume, image) are free-form and deliver only inside an open
+  24-hour WhatsApp window.
+- `WEBHOOK_SECRET` is supported by the code but is only enforced once it is
+  set both here and on the assistant.
+- Render's free tier sleeps when idle, so the first webhook after a quiet
+  period can be slow. Set `DATABASE_URL` to keep callbacks across restarts.
+- A Groq model name may be retired, as the previous one
+  (`llama-3.3-70b-versatile`) was. Override with `GROQ_MODEL` and re-run
+  `vapi_setup.py`.
 
-Do **not** send a deck, a proposal, or a demo video in place of a live
-system — the brief is explicit that a working call is the only thing that
-counts.
+## Submitting to ElevateBox
+
+Per the brief, WhatsApp 8688664337 with the working prototype, the
+architecture diagram (`architecture.png`), a note under 200 words, the
+resume, the mobile number and the repo link. Do not send a deck or a demo
+video in place of a live call.
