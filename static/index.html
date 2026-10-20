@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ElevateBox Voice Agent</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--text:#e8eaf0;--mute:#9aa3b2;--accent:#6ea8fe;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}
+@media (prefers-color-scheme: light){:root{--bg:#f6f7f9;--card:#fff;--line:#e3e6ec;--text:#14171f;--mute:#5b6473;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:1.7rem;margin:0 0 4px}
+h2{font-size:1.1rem;margin:0 0 8px}
+p{margin:0 0 12px}
+.sub{color:var(--mute);margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;border:0;border-radius:8px;padding:12px 18px;background:var(--accent);color:#fff;cursor:pointer;min-height:44px}
+button.stop{background:var(--bad)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input{font:inherit;padding:12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);min-height:44px;flex:1;min-width:200px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.85rem;border:1px solid var(--line);color:var(--mute)}
+.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}
+#status{min-height:1.5em;color:var(--mute)}
+#log{max-height:260px;overflow:auto;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
+#log div{margin-bottom:8px}
+#log b{color:var(--accent)}
+ol{padding-left:20px;margin:0}
+li{margin-bottom:6px}
+img{max-width:100%;border-radius:8px;border:1px solid var(--line)}
+.note{color:var(--mute);font-size:.9rem}
+a{color:var(--accent)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>ElevateBox Voice Agent</h1>
+<p class="sub">A voice agent that talks to a small business owner in English, Hindi or Telugu, works out how serious the lead is, and sends a WhatsApp follow-up.</p>
+
+<section class="card">
+<h2>Try it</h2>
+<p>Talk to the agent from your browser. Allow the microphone when asked. The agent greets you first.</p>
+<div class="row">
+<button id="start">Start talking</button>
+<button id="stop" class="stop" hidden>End call</button>
+<span id="state" class="pill">checking...</span>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="log" hidden aria-label="Live transcript"></div>
+<p class="note">Tip: use headphones so the agent does not hear itself. You can interrupt it mid-sentence.</p>
+</section>
+
+<section class="card">
+<h2>Get a phone call instead</h2>
+<p>Enter your number with country code and the agent will call you.</p>
+<form id="phone-form" class="row">
+<label for="num" hidden>Phone number</label>
+<input id="num" type="tel" inputmode="tel" placeholder="+91 98765 43210" autocomplete="tel" required>
+<button type="submit" id="call-btn">Call me</button>
+</form>
+<p id="phone-msg" role="status" aria-live="polite" class="note"></p>
+</section>
+
+<section class="card">
+<h2>What happens in a conversation</h2>
+<ol>
+<li>The agent greets you and asks what you sell and how you sell today.</li>
+<li>It asks about volume, budget and timeline, one question at a time.</li>
+<li>It classifies the lead as Hot, Warm or Cold.</li>
+<li>For a Hot lead it sends a WhatsApp message during the call. After every call it sends a follow-up, and it can book a callback at a time you choose.</li>
+</ol>
+</section>
+
+<section class="card">
+<h2>How it is built</h2>
+<p>Vapi runs the call, Deepgram handles speech, Groq runs the conversation, Gemini classifies the lead, and this FastAPI service handles tool calls and WhatsApp. Source and notes: <a href="https://github.com/Shaurya55555/ElevateBox-VoiceAgent">github.com/Shaurya55555/ElevateBox-VoiceAgent</a>.</p>
+<img src="/static/architecture.png" alt="Architecture diagram: caller, Vapi, Deepgram, Groq, Gemini, FastAPI webhook, WhatsApp Cloud API">
+<p class="note" style="margin-top:12px">Known limits: the voices are English-only, so Hindi and Telugu replies sound off. The WhatsApp message needs an approved template outside the 24-hour window.</p>
+</section>
+</main>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+let cfg = {browser_call: false, phone_call: false};
+try { cfg = await (await fetch("/config")).json(); } catch (e) {}
+
+const state = $("state"), status = $("status"), log = $("log");
+const start = $("start"), stop = $("stop");
+
+if (cfg.browser_call) { state.textContent = "ready"; state.className = "pill ok"; }
+else { state.textContent = "browser calls not enabled yet"; state.className = "pill warn"; start.disabled = true; }
+if (!cfg.phone_call) {
+  $("call-btn").disabled = true; $("num").disabled = true;
+  $("phone-msg").textContent = "Phone calls are not enabled yet (the telephony number is still being set up). Use the browser call above.";
+}
+
+function add(role, text) {
+  log.hidden = false;
+  const d = document.createElement("div");
+  const b = document.createElement("b");
+  b.textContent = role === "assistant" ? "Agent: " : "You: ";
+  d.append(b, document.createTextNode(text));
+  log.append(d); log.scrollTop = log.scrollHeight;
+}
+
+let vapi;
+start.addEventListener("click", async () => {
+  start.disabled = true; status.textContent = "Connecting...";
+  try {
+    const mod = await import("https://esm.sh/@vapi-ai/web@2.7.1");
+    const Vapi = mod.default;
+    vapi = new Vapi(cfg.public_key);
+    vapi.on("call-start", () => { status.textContent = "Connected. Say hello."; stop.hidden = false; start.hidden = true; });
+    vapi.on("call-end", () => { status.textContent = "Call ended."; stop.hidden = true; start.hidden = false; start.disabled = false; });
+    vapi.on("speech-start", () => status.textContent = "Agent is speaking...");
+    vapi.on("speech-end", () => status.textContent = "Your turn.");
+    vapi.on("message", m => { if (m.type === "transcript" && m.transcriptType === "final") add(m.role, m.transcript); });
+    vapi.on("error", () => { status.textContent = "Something went wrong. Check the microphone permission and try again."; start.disabled = false; start.hidden = false; stop.hidden = true; });
+    await vapi.start(cfg.assistant_id);
+  } catch (e) {
+    status.textContent = "Could not start the call. Check the microphone permission and try again.";
+    start.disabled = false;
+  }
+});
+stop.addEventListener("click", () => vapi && vapi.stop());
+
+$("phone-form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const msg = $("phone-msg"), btn = $("call-btn");
+  btn.disabled = true; msg.textContent = "Placing the call...";
+  try {
+    const r = await fetch("/api/call", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({number: $("num").value})});
+    const j = await r.json();
+    msg.textContent = r.ok ? "Calling you now. Pick up in a few seconds." : (j.detail || "Could not place the call.");
+  } catch (e) { msg.textContent = "Network error. Try again."; }
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>

@@ -21,10 +21,16 @@ simulated payloads (tests/), not yet with a payload from a real call.
 import hmac
 import json
 import os
+import re
+import time
 from datetime import datetime, timezone
+from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -35,6 +41,8 @@ import whatsapp
 from logging_utils import log_event
 
 app = FastAPI()
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 scheduler.init_db()
 
 RESUME_PUBLIC_URL = os.environ.get("RESUME_PUBLIC_URL", "")
@@ -201,3 +209,51 @@ async def _handle_end_of_call(message: dict) -> None:
 @app.get("/health")
 async def health():
     return {"status": "ok", "db": "postgres" if scheduler.using_postgres() else "sqlite"}
+
+
+@app.get("/")
+async def home():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/config")
+async def public_config():
+    """Only what the browser needs. The Vapi public key is meant to be public."""
+    return {
+        "browser_call": bool(os.environ.get("VAPI_PUBLIC_KEY") and os.environ.get("VAPI_ASSISTANT_ID")),
+        "phone_call": bool(os.environ.get("VAPI_PHONE_NUMBER_ID")) and os.environ.get("ENABLE_PHONE_CALLS") == "1",
+        "public_key": os.environ.get("VAPI_PUBLIC_KEY", ""),
+        "assistant_id": os.environ.get("VAPI_ASSISTANT_ID", ""),
+    }
+
+
+_last_call_by_ip: dict[str, float] = {}
+
+
+@app.post("/api/call")
+async def request_call(request: Request):
+    """Ask Vapi to phone the visitor. Off until a phone number is configured."""
+    phone_id = os.environ.get("VAPI_PHONE_NUMBER_ID", "")
+    if not phone_id or os.environ.get("ENABLE_PHONE_CALLS") != "1":
+        raise HTTPException(status_code=503, detail="Phone calls are not enabled yet.")
+    body = await request.json()
+    number = re.sub(r"[\s\-()]", "", str(body.get("number", "")))
+    if not re.fullmatch(r"\+\d{10,14}", number):
+        raise HTTPException(status_code=400,
+                            detail="Enter the number with country code, like +919876543210.")
+    ip = request.client.host if request.client else "?"
+    if time.time() - _last_call_by_ip.get(ip, 0) < 120:
+        raise HTTPException(status_code=429, detail="Please wait a couple of minutes before another call.")
+    _last_call_by_ip[ip] = time.time()
+    resp = requests.post(
+        "https://api.vapi.ai/call",
+        headers={"Authorization": f"Bearer {os.environ['VAPI_API_KEY']}"},
+        json={"assistantId": os.environ["VAPI_ASSISTANT_ID"], "phoneNumberId": phone_id,
+              "customer": {"number": number}},
+        timeout=30,
+    )
+    if not resp.ok:
+        log_event("web_call_failed", "", status=resp.status_code)
+        raise HTTPException(status_code=502,
+                            detail="The call could not be placed. Try the browser call instead.")
+    return {"status": "calling"}
