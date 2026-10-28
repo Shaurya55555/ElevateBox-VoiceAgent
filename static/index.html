@@ -4,141 +4,415 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ElevateBox Voice Agent</title>
+<meta name="description" content="Talk to a voice agent that understands your online-store needs in English, Hindi or Telugu, rates how ready you are, and follows up on WhatsApp.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Crect x='7' y='13' width='3' height='6' rx='1.5' fill='white'/%3E%3Crect x='12' y='8' width='3' height='16' rx='1.5' fill='white'/%3E%3Crect x='17' y='11' width='3' height='10' rx='1.5' fill='white'/%3E%3Crect x='22' y='14' width='3' height='4' rx='1.5' fill='white'/%3E%3C/svg%3E">
 <style>
-:root{--bg:#0f1115;--card:#171a21;--line:#262b36;--text:#e8eaf0;--mute:#9aa3b2;--accent:#6ea8fe;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}
-@media (prefers-color-scheme: light){:root{--bg:#f6f7f9;--card:#fff;--line:#e3e6ec;--text:#14171f;--mute:#5b6473;--accent:#2563eb;--ok:#15803d;--warn:#b45309;--bad:#b91c1c}}
+:root{--bg:#f6f7fb;--surface:#fff;--surface2:#eef1f7;--line:#e1e5ee;--text:#131826;--mute:#5a6479;--accent:#2563eb;--accent-fg:#fff;--accent-soft:#e6eeff;--ok:#15803d;--ok-soft:#e3f6ea;--warn:#b45309;--warn-soft:#fdf0d9;--bad:#b91c1c;--bad-soft:#fde8e8;--hot:#dc2626;--warm:#d97706;--cold:#2563eb;--shadow:0 1px 2px rgba(16,24,40,.06),0 8px 24px rgba(16,24,40,.06)}
+:root[data-theme=dark]{--bg:#0e1118;--surface:#161b25;--surface2:#1d2330;--line:#272e3d;--text:#e8ebf2;--mute:#9aa4b8;--accent:#6ea8fe;--accent-fg:#0b1220;--accent-soft:#16233d;--ok:#4ade80;--ok-soft:#12291c;--warn:#fbbf24;--warn-soft:#2e2412;--bad:#f87171;--bad-soft:#2f1717;--hot:#f87171;--warm:#fbbf24;--cold:#6ea8fe;--shadow:none}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:860px;margin:0 auto;padding:32px 16px 64px}
-h1{font-size:1.7rem;margin:0 0 4px}
-h2{font-size:1.1rem;margin:0 0 8px}
-p{margin:0 0 12px}
-.sub{color:var(--mute);margin-bottom:24px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-button{font:inherit;border:0;border-radius:8px;padding:12px 18px;background:var(--accent);color:#fff;cursor:pointer;min-height:44px}
-button.stop{background:var(--bad)}
-button:disabled{opacity:.5;cursor:not-allowed}
-input{font:inherit;padding:12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);min-height:44px;flex:1;min-width:200px}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.85rem;border:1px solid var(--line);color:var(--mute)}
-.pill.ok{color:var(--ok)}.pill.warn{color:var(--warn)}
-#status{min-height:1.5em;color:var(--mute)}
-#log{max-height:260px;overflow:auto;border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
-#log div{margin-bottom:8px}
-#log b{color:var(--accent)}
-ol{padding-left:20px;margin:0}
-li{margin-bottom:6px}
-img{max-width:100%;border-radius:8px;border:1px solid var(--line)}
-.note{color:var(--mute);font-size:.9rem}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
 a{color:var(--accent)}
+h1,h2,h3{line-height:1.2;margin:0}
+p{margin:0 0 12px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 [hidden]{display:none!important}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:12px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--text);text-decoration:none;font-size:1.05rem}
+.brand i{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center}
+.brand svg{width:18px;height:18px}
+nav.links{display:flex;gap:4px;margin-left:16px}
+nav.links a{padding:8px 12px;border-radius:8px;text-decoration:none;color:var(--mute);font-weight:500;font-size:.95rem}
+nav.links a:hover{background:var(--surface2);color:var(--text)}
+nav.links a[aria-current=page]{background:var(--accent-soft);color:var(--accent)}
+.spacer{flex:1}
+.icon-btn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer;display:grid;place-items:center;font-size:1.05rem}
+.menu-btn{display:none}
+@media(max-width:760px){.menu-btn{display:grid}nav.links{display:none;position:absolute;top:60px;left:0;right:0;flex-direction:column;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 16px 12px;margin:0}nav.links.open{display:flex}nav.links a{padding:12px}}
+main{padding:28px 0 72px}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:28px;align-items:start}
+@media(max-width:860px){.hero{grid-template-columns:1fr}}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:600;color:var(--accent);background:var(--accent-soft);padding:4px 12px;border-radius:999px;margin-bottom:14px}
+h1.title{font-size:clamp(1.9rem,4.5vw,2.8rem);letter-spacing:-.02em;margin-bottom:14px}
+.lead{color:var(--mute);font-size:1.08rem;max-width:34em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0}
+.chip{border:1px solid var(--line);background:var(--surface);padding:5px 12px;border-radius:999px;font-size:.88rem;color:var(--mute)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow)}
+.card+.card{margin-top:16px}
+.card h2{font-size:1.15rem;margin-bottom:6px}
+.sub{color:var(--mute);font-size:.95rem}
+.btn{font:inherit;font-weight:600;border:0;border-radius:10px;padding:11px 20px;min-height:44px;background:var(--accent);color:var(--accent-fg);cursor:pointer;display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.btn:hover{filter:brightness(1.07)}
+.btn.sec{background:var(--surface2);color:var(--text);border:1px solid var(--line)}
+.btn.bad{background:var(--bad);color:#fff}
+.btn.sm{min-height:34px;padding:6px 12px;font-size:.88rem;border-radius:8px}
+.btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+input,select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px}
+input:focus,select:focus{border-color:var(--accent)}
+label{display:block;font-weight:600;font-size:.9rem;margin-bottom:6px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:600;background:var(--surface2);color:var(--mute)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.Hot{background:var(--bad-soft);color:var(--hot)}.pill.Warm{background:var(--warn-soft);color:var(--warm)}.pill.Cold{background:var(--accent-soft);color:var(--cold)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+/* talk */
+.orb{width:120px;height:120px;border-radius:50%;margin:8px auto 14px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);transition:.2s}
+.orb svg{width:44px;height:44px}
+.orb.live{background:var(--accent);color:var(--accent-fg);animation:pulse 1.6s infinite}
+.orb.agent{box-shadow:0 0 0 14px color-mix(in srgb,var(--accent) 22%,transparent)}
+@keyframes pulse{50%{transform:scale(1.04)}}
+@media(prefers-reduced-motion:reduce){.orb.live{animation:none}}
+.center{text-align:center}
+.controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+#status{min-height:1.6em;color:var(--mute);margin:10px 0 0;text-align:center}
+.timer{font-variant-numeric:tabular-nums;font-weight:600}
+.chat{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;max-height:340px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:86%;padding:9px 13px;border-radius:14px;font-size:.95rem}
+.msg.assistant{background:var(--surface2);align-self:flex-start;border-bottom-left-radius:4px}
+.msg.user{background:var(--accent);color:var(--accent-fg);align-self:flex-end;border-bottom-right-radius:4px}
+.msg small{display:block;opacity:.7;font-size:.72rem;margin-bottom:2px}
+.notice{border-radius:12px;padding:12px 14px;font-size:.92rem;background:var(--warn-soft);color:var(--warn);margin-top:14px}
+.notice.ok{background:var(--ok-soft);color:var(--ok)}
+.notice.bad{background:var(--bad-soft);color:var(--bad)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:760px){.grid3{grid-template-columns:1fr}}
+.step{display:flex;gap:14px;padding:14px 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0}
+.num{flex:none;width:32px;height:32px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-weight:700}
+.tips{margin:10px 0 0;padding-left:20px;color:var(--mute);font-size:.92rem}
+.section-title{font-size:1.6rem;letter-spacing:-.01em;margin:6px 0 18px}
+img.arch{max-width:100%;border-radius:12px;border:1px solid var(--line);background:#fff}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.row>.grow{flex:1;min-width:200px}
+table{width:100%;border-collapse:collapse;font-size:.92rem}
+th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);font-weight:600}
+.tablewrap{overflow-x:auto}
+tr.click{cursor:pointer}tr.click:hover{background:var(--surface2)}
+.detail td{background:var(--surface2)}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:4px 12px;font-size:.9rem}
+.kv b{color:var(--mute);font-weight:600}
+.stat{padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.stat b{display:block;font-size:1.8rem;font-variant-numeric:tabular-nums}
+.stat span{color:var(--mute);font-size:.85rem}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+@media(max-width:760px){.stats{grid-template-columns:repeat(2,1fr)}}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+.filters button{font:inherit;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;padding:6px 14px;cursor:pointer;min-height:36px}
+.filters button[aria-pressed=true]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.empty{text-align:center;color:var(--mute);padding:30px 10px}
+.status-row{display:grid;grid-template-columns:1fr auto;gap:6px 14px;padding:12px 0;border-top:1px solid var(--line)}
+.status-row:first-of-type{border-top:0}
+.status-row small{color:var(--mute);grid-column:1}
+footer{border-top:1px solid var(--line);padding:22px 0;color:var(--mute);font-size:.9rem}
+.skip{position:absolute;left:-999px}.skip:focus{left:8px;top:8px;background:var(--surface);padding:8px 12px;z-index:50;border-radius:8px}
 </style>
 </head>
 <body>
-<main>
-<h1>ElevateBox Voice Agent</h1>
-<p class="sub">A voice agent that talks to a small business owner in English, Hindi or Telugu, works out how serious the lead is, and sends a WhatsApp follow-up.</p>
-
-<section class="card">
-<h2>Try it</h2>
-<p>Talk to the agent from your browser. Allow the microphone when asked. The agent greets you first.</p>
-<div class="row">
-<button id="start">Start talking</button>
-<button id="stop" class="stop" hidden>End call</button>
-<span id="state" class="pill">checking...</span>
-</div>
-<p id="status" role="status" aria-live="polite"></p>
-<div id="log" hidden aria-label="Live transcript"></div>
-<p class="note">Tip: use headphones so the agent does not hear itself. You can interrupt it mid-sentence.</p>
-</section>
-
-<section class="card">
-<h2>Get a phone call instead</h2>
-<p>Enter your number with country code and the agent will call you.</p>
-<form id="phone-form" class="row">
-<label for="num" hidden>Phone number</label>
-<input id="num" type="tel" inputmode="tel" placeholder="+91 98765 43210" autocomplete="tel" required>
-<button type="submit" id="call-btn">Call me</button>
-</form>
-<p id="phone-msg" role="status" aria-live="polite" class="note"></p>
-</section>
-
-<section class="card">
-<h2>What happens in a conversation</h2>
-<ol>
-<li>The agent greets you and asks what you sell and how you sell today.</li>
-<li>It asks about volume, budget and timeline, one question at a time.</li>
-<li>It classifies the lead as Hot, Warm or Cold.</li>
-<li>For a Hot lead it sends a WhatsApp message during the call. After every call it sends a follow-up, and it can book a callback at a time you choose.</li>
-</ol>
-</section>
-
-<section class="card">
-<h2>How it is built</h2>
-<p>Vapi runs the call, Deepgram handles speech, Groq runs the conversation, Gemini classifies the lead, and this FastAPI service handles tool calls and WhatsApp. Source and notes: <a href="https://github.com/Shaurya55555/ElevateBox-VoiceAgent">github.com/Shaurya55555/ElevateBox-VoiceAgent</a>.</p>
-<img src="/static/architecture.png" alt="Architecture diagram: caller, Vapi, Deepgram, Groq, Gemini, FastAPI webhook, WhatsApp Cloud API">
-<p class="note" style="margin-top:12px">Known limits: the voices are English-only, so Hindi and Telugu replies sound off. The WhatsApp message needs an approved template outside the 24-hour window.</p>
-</section>
-</main>
+<a class="skip" href="#app">Skip to content</a>
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="#/"><i><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="12" width="4" height="8" rx="2" fill="#fff"/><rect x="11" y="6" width="4" height="20" rx="2" fill="#fff"/><rect x="17" y="10" width="4" height="12" rx="2" fill="#fff"/><rect x="23" y="13" width="4" height="6" rx="2" fill="#fff"/></svg></i>ElevateBox</a>
+    <nav class="links" id="nav" aria-label="Main">
+      <a href="#/" data-r="/">Talk</a>
+      <a href="#/call" data-r="/call">Get a call</a>
+      <a href="#/how" data-r="/how">How it works</a>
+      <a href="#/status" data-r="/status">Status</a>
+      <a href="#/dashboard" data-r="/dashboard">Dashboard</a>
+    </nav>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="theme" aria-label="Switch light or dark theme" title="Theme">☾</button>
+    <button class="icon-btn menu-btn" id="menu" aria-label="Open menu" aria-expanded="false">☰</button>
+  </div>
+</header>
+<main class="wrap" id="app" tabindex="-1"></main>
+<footer><div class="wrap">ElevateBox voice sales agent. Built by Shaurya Bajpai. <a href="https://github.com/Shaurya55555/ElevateBox-VoiceAgent">Source on GitHub</a></div></footer>
 
 <script type="module">
-const $ = id => document.getElementById(id);
-let cfg = {browser_call: false, phone_call: false};
-try { cfg = await (await fetch("/config")).json(); } catch (e) {}
-
-const state = $("state"), status = $("status"), log = $("log");
-const start = $("start"), stop = $("stop");
-
-if (cfg.browser_call) { state.textContent = "ready"; state.className = "pill ok"; }
-else { state.textContent = "browser calls not enabled yet"; state.className = "pill warn"; start.disabled = true; }
-if (!cfg.phone_call) {
-  $("call-btn").disabled = true; $("num").disabled = true;
-  $("phone-msg").textContent = "Phone calls are not enabled yet (the telephony number is still being set up). Use the browser call above.";
-}
-
-function add(role, text) {
-  log.hidden = false;
-  const d = document.createElement("div");
-  const b = document.createElement("b");
-  b.textContent = role === "assistant" ? "Agent: " : "You: ";
-  d.append(b, document.createTextNode(text));
-  log.append(d); log.scrollTop = log.scrollHeight;
-}
-
-let vapi;
-start.addEventListener("click", async () => {
-  start.disabled = true; status.textContent = "Connecting...";
-  try {
-    const mod = await import("https://esm.sh/@vapi-ai/web@2.7.1");
-    const Vapi = mod.default;
-    vapi = new Vapi(cfg.public_key);
-    vapi.on("call-start", () => { status.textContent = "Connected. Say hello."; stop.hidden = false; start.hidden = true; });
-    vapi.on("call-end", () => { status.textContent = "Call ended."; stop.hidden = true; start.hidden = false; start.disabled = false; });
-    vapi.on("speech-start", () => status.textContent = "Agent is speaking...");
-    vapi.on("speech-end", () => status.textContent = "Your turn.");
-    vapi.on("message", m => { if (m.type === "transcript" && m.transcriptType === "final") add(m.role, m.transcript); });
-    vapi.on("error", () => { status.textContent = "Something went wrong. Check the microphone permission and try again."; start.disabled = false; start.hidden = false; stop.hidden = true; });
-    await vapi.start(cfg.assistant_id);
-  } catch (e) {
-    status.textContent = "Could not start the call. Check the microphone permission and try again.";
-    start.disabled = false;
+const $ = (s, r = document) => r.querySelector(s);
+function h(tag, attrs = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v === true) el.setAttribute(k, "");
+    else el.setAttribute(k, v);
   }
-});
-stop.addEventListener("click", () => vapi && vapi.stop());
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return el;
+}
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+  sget(k){ try { return sessionStorage.getItem(k); } catch { return null; } },
+  sset(k,v){ try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k,v); } catch {} },
+};
 
-$("phone-form").addEventListener("submit", async ev => {
-  ev.preventDefault();
-  const msg = $("phone-msg"), btn = $("call-btn");
-  btn.disabled = true; msg.textContent = "Placing the call...";
-  try {
-    const r = await fetch("/api/call", {method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({number: $("num").value})});
-    const j = await r.json();
-    msg.textContent = r.ok ? "Calling you now. Pick up in a few seconds." : (j.detail || "Could not place the call.");
-  } catch (e) { msg.textContent = "Network error. Try again."; }
-  btn.disabled = false;
-});
+/* theme */
+const root = document.documentElement;
+function setTheme(t){ root.dataset.theme = t; $("#theme").textContent = t === "dark" ? "☀" : "☾"; store.set("eb_theme", t); }
+setTheme(store.get("eb_theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+$("#theme").onclick = () => setTheme(root.dataset.theme === "dark" ? "light" : "dark");
+$("#menu").onclick = () => { const n = $("#nav"); const o = n.classList.toggle("open"); $("#menu").setAttribute("aria-expanded", o); };
+
+/* shared data */
+let cfg = { browser_call: false, phone_call: false, public_key: "", assistant_id: "" };
+const cfgReady = fetch("/config").then(r => r.json()).then(j => { cfg = j; }).catch(() => {});
+
+let activeCall = null; // survives navigation so a call is never dropped by clicking a tab
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+
+/* ---------- Talk ---------- */
+function Talk() {
+  const orb = h("div", { class: "orb", "aria-hidden": "true" });
+  orb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>';
+  const status = h("p", { id: "status", role: "status", "aria-live": "polite" });
+  const timer = h("span", { class: "timer" }, "00:00");
+  const chat = h("div", { class: "chat", "aria-label": "Live transcript", hidden: true });
+  const start = h("button", { class: "btn" }, "Start talking");
+  const mute = h("button", { class: "btn sec", hidden: true }, "Mute");
+  const stop = h("button", { class: "btn bad", hidden: true }, "End call");
+  const state = h("span", { class: "pill" }, "checking…");
+  const notice = h("div", { class: "notice", hidden: true });
+  const after = h("div", { class: "notice ok", hidden: true }, "Call ended. If you shared your number, a WhatsApp follow-up is on its way, and any callback you asked for is booked.");
+  let secs = 0, tick = null, vapi = null, muted = false;
+
+  function bubble(role, text) {
+    chat.hidden = false;
+    chat.append(h("div", { class: `msg ${role}` }, h("small", {}, role === "assistant" ? "Agent" : "You"), text));
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function ui(live) {
+    start.hidden = live; stop.hidden = !live; mute.hidden = !live;
+    orb.classList.toggle("live", live);
+    if (!live) { orb.classList.remove("agent"); clearInterval(tick); }
+  }
+  cfgReady.then(() => {
+    if (cfg.browser_call) { state.textContent = "Ready"; state.className = "pill ok"; }
+    else {
+      state.textContent = "Not enabled yet"; state.className = "pill warn"; start.disabled = true;
+      notice.hidden = false;
+      notice.textContent = "Browser calls are switched off on this server until a Vapi public key is added. The rest of the system is running.";
+    }
+  });
+
+  start.onclick = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) { status.textContent = "This browser can't use the microphone. Try Chrome, Edge or Safari."; return; }
+    start.disabled = true; status.textContent = "Connecting…"; after.hidden = true;
+    try {
+      const Vapi = (await import("https://esm.sh/@vapi-ai/web@2.7.1")).default;
+      vapi = new Vapi(cfg.public_key);
+      activeCall = vapi;
+      vapi.on("call-start", () => { status.textContent = "Connected. Say hello."; ui(true); secs = 0; timer.textContent = "00:00"; tick = setInterval(() => { secs++; timer.textContent = mmss(secs); }, 1000); });
+      vapi.on("call-end", () => { status.textContent = "Call ended."; ui(false); start.disabled = false; after.hidden = false; activeCall = null; muted = false; mute.textContent = "Mute"; });
+      vapi.on("speech-start", () => { status.textContent = "Agent is speaking…"; orb.classList.add("agent"); });
+      vapi.on("speech-end", () => { status.textContent = "Your turn."; orb.classList.remove("agent"); });
+      vapi.on("message", m => { if (m.type === "transcript" && m.transcriptType === "final") bubble(m.role, m.transcript); });
+      vapi.on("error", () => { status.textContent = "Something went wrong. Check the microphone permission and try again."; ui(false); start.disabled = false; activeCall = null; });
+      await vapi.start(cfg.assistant_id);
+    } catch {
+      status.textContent = "Couldn't start. Allow the microphone for this site and try again.";
+      start.disabled = false; activeCall = null;
+    }
+  };
+  stop.onclick = () => vapi && vapi.stop();
+  mute.onclick = () => { if (!vapi) return; muted = !muted; vapi.setMuted(muted); mute.textContent = muted ? "Unmute" : "Mute"; };
+
+  return h("div", { class: "hero" },
+    h("section", {},
+      h("span", { class: "eyebrow" }, "● Voice AI for online stores"),
+      h("h1", { class: "title" }, "Talk to the agent that qualifies your store project."),
+      h("p", { class: "lead" }, "It chats with you in English, Hindi or Telugu, asks about what you sell and your budget, rates how ready you are, and sends the details to you on WhatsApp."),
+      h("div", { class: "chips" }, ["Interrupt it any time", "English · हिन्दी · తెలుగు", "Books callbacks", "WhatsApp follow-up"].map(t => h("span", { class: "chip" }, t))),
+      h("div", { class: "grid3" },
+        [["1", "Say hello", "The agent greets you and asks how you sell today."],
+         ["2", "Answer a few questions", "Product count, budget and timeline, one at a time."],
+         ["3", "Get your follow-up", "A WhatsApp summary, plus a callback at the time you choose."]].map(([n, t, d]) =>
+          h("div", { class: "card", style: "margin:0;padding:16px" }, h("div", { class: "num", style: "margin-bottom:8px" }, n), h("b", {}, t), h("p", { class: "sub", style: "margin:4px 0 0" }, d))))),
+    h("section", {},
+      h("div", { class: "card center" },
+        h("h2", {}, "Try it now"), h("p", { class: "sub" }, "Free, in your browser. The agent speaks first."),
+        orb, h("div", { class: "row", style: "justify-content:center;align-items:center" }, state, timer),
+        h("div", { class: "controls" }, start, mute, stop), status, notice, after, chat,
+        h("ul", { class: "tips", style: "text-align:left" },
+          h("li", {}, "Use headphones so the agent doesn't hear itself."),
+          h("li", {}, "Allow the microphone when your browser asks."),
+          h("li", {}, "Say your callback time in plain words, like “tomorrow at 5”.")))));
+}
+
+/* ---------- Get a call ---------- */
+function CallMe() {
+  const code = h("select", { id: "cc", "aria-label": "Country code" },
+    [["+91", "India +91"], ["+1", "US/Canada +1"], ["+44", "UK +44"], ["+971", "UAE +971"], ["+65", "Singapore +65"], ["+61", "Australia +61"]].map(([v, t]) => h("option", { value: v }, t)));
+  const num = h("input", { id: "num", type: "tel", inputmode: "tel", placeholder: "98765 43210", autocomplete: "tel-national", required: true });
+  const btn = h("button", { class: "btn", type: "submit" }, "Call me");
+  const msg = h("div", { class: "notice", hidden: true, role: "status", "aria-live": "polite" });
+  const say = (t, kind = "") => { msg.hidden = false; msg.className = `notice ${kind}`; msg.textContent = t; };
+  cfgReady.then(() => { if (!cfg.phone_call) { btn.disabled = true; num.disabled = true; say("Phone calls aren't enabled on this server yet, because the telephony number is still being set up. Use the browser call on the Talk page."); } });
+  const form = h("form", { class: "row", onsubmit: async ev => {
+    ev.preventDefault();
+    const digits = num.value.replace(/\D/g, "").replace(/^0+/, "");
+    if (digits.length < 7) return say("That number looks too short. Check it and try again.", "bad");
+    btn.disabled = true; say("Placing the call…", "ok");
+    try {
+      const r = await fetch("/api/call", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ number: code.value + digits }) });
+      const j = await r.json().catch(() => ({}));
+      r.ok ? say("Calling you now. Pick up in a few seconds.", "ok") : say(j.detail || "Couldn't place the call.", "bad");
+    } catch { say("Network problem. Please try again.", "bad"); }
+    btn.disabled = !cfg.phone_call;
+  } },
+    h("div", {}, h("label", { for: "cc" }, "Country"), code),
+    h("div", { class: "grow" }, h("label", { for: "num" }, "Phone number"), num), btn);
+  return h("div", { style: "max-width:640px;margin:0 auto" },
+    h("h1", { class: "section-title" }, "Get a call instead"),
+    h("div", { class: "card" }, h("p", { class: "sub" }, "Enter your number and the agent will phone you within seconds. We use it only for this call and the WhatsApp follow-up."), form, msg),
+    h("div", { class: "card" }, h("h2", {}, "Prefer not to share a number?"), h("p", { class: "sub" }, "Use the browser call. It works the same way, with no number needed."), h("a", { class: "btn sec", href: "#/" }, "Talk in the browser")));
+}
+
+/* ---------- How it works ---------- */
+function How() {
+  const steps = [
+    ["The call starts", "Vapi runs the live call. Deepgram turns your speech into text and a Groq language model replies from a carefully written sales prompt. You can interrupt at any point."],
+    ["Facts are extracted", "As you talk, Gemini pulls out your product type, catalog size, budget, timeline and features."],
+    ["The lead is rated", "Hot, Warm or Cold, decided from what you actually said, not from a script."],
+    ["WhatsApp goes out", "On the first Hot rating a WhatsApp is sent during the call. After every call a follow-up is sent with the real context of the chat."],
+    ["Callbacks get booked", "Say “call me tomorrow at 5” and the time is resolved and stored for the team."]];
+  return h("div", {},
+    h("h1", { class: "section-title" }, "How it works"),
+    h("div", { class: "card" }, steps.map(([t, d], i) => h("div", { class: "step" }, h("div", { class: "num" }, String(i + 1)), h("div", {}, h("b", {}, t), h("p", { class: "sub", style: "margin:2px 0 0" }, d))))),
+    h("div", { class: "grid3", style: "margin-top:16px" },
+      [["Hot", "Clear budget and a near timeline. Ready to buy."], ["Warm", "Interested, but missing budget or timing."], ["Cold", "Just browsing or no current need."]].map(([l, d]) =>
+        h("div", { class: "card", style: "margin:0" }, h("span", { class: `pill ${l}` }, h("span", { class: "dot" }), l), h("p", { class: "sub", style: "margin:10px 0 0" }, d)))),
+    h("div", { class: "card", style: "margin-top:16px" }, h("h2", {}, "Architecture"), h("p", { class: "sub" }, "Vapi, Deepgram, Groq, Gemini, a FastAPI webhook service, and the WhatsApp Cloud API."),
+      h("img", { class: "arch", src: "/static/architecture.png", alt: "Architecture diagram: caller, Vapi, Deepgram, Groq, Gemini, FastAPI webhook, WhatsApp Cloud API" })),
+    h("div", { class: "card" }, h("h2", {}, "Built with"), h("div", { class: "chips" }, ["Vapi", "Deepgram Nova-3 + Aura-2", "Groq", "Gemini 2.5 Flash", "FastAPI", "SQLite / Postgres", "WhatsApp Cloud API", "Render"].map(t => h("span", { class: "chip" }, t)))));
+}
+
+/* ---------- Status ---------- */
+function Status() {
+  const live = h("span", { class: "pill" }, "checking…");
+  fetch("/health").then(r => r.json()).then(j => { live.textContent = `Backend up · ${j.db}`; live.className = "pill ok"; }).catch(() => { live.textContent = "Backend unreachable"; live.className = "pill bad"; });
+  const flags = h("div", {});
+  cfgReady.then(() => flags.append(
+    row("Browser calls on this server", cfg.browser_call ? "ok" : "warn", cfg.browser_call ? "Enabled" : "Off", "Needs the Vapi public key."),
+    row("Phone calls on this server", cfg.phone_call ? "ok" : "warn", cfg.phone_call ? "Enabled" : "Off", "Needs an Exotel number and ENABLE_PHONE_CALLS.")));
+  function row(t, kind, label, note) { return h("div", { class: "status-row" }, h("b", {}, t), h("span", { class: `pill ${kind}` }, label), h("small", {}, note)); }
+  const rows = [
+    ["Backend deployed on Render", "ok", "Verified", "Health check above."],
+    ["Webhook logic (tools, end of call, retries)", "ok", "Tested", "32 automated tests with simulated Vapi payloads."],
+    ["Lead dashboard and callbacks", "ok", "Tested", "Saved on every call and tested end to end."],
+    ["Lead classification (Gemini)", "ok", "Verified", "Run live on synthetic transcripts."],
+    ["WhatsApp sending", "warn", "Mocked only", "Tested against a mock of Meta's API. Needs a Meta token to deliver for real."],
+    ["A real phone call", "warn", "Not yet", "Needs an Exotel number (KYC)."],
+    ["Hindi and Telugu voice quality", "warn", "Weak", "The current voices are English voices."]];
+  return h("div", { style: "max-width:760px;margin:0 auto" },
+    h("h1", { class: "section-title" }, "System status"),
+    h("div", { class: "card" }, h("div", { class: "row", style: "align-items:center" }, h("b", {}, "Live check"), live), h("div", { style: "margin-top:8px" }, flags)),
+    h("div", { class: "card" }, h("h2", {}, "What is and isn't proven"), h("p", { class: "sub" }, "Everything here is stated as it really is."), rows.map(r => row(...r))));
+}
+
+/* ---------- Dashboard ---------- */
+function Dashboard() {
+  const wrap = h("div", {});
+  const token = () => store.sget("eb_admin");
+  let data = null, filter = "All", q = "", open = null, timer = null;
+
+  async function api(path, opts = {}) {
+    const r = await fetch(path, { ...opts, headers: { "X-Admin-Token": token() || "", "Content-Type": "application/json" } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.detail || `Error ${r.status}`); e.status = r.status; throw e; }
+    return j;
+  }
+  async function load() {
+    try { data = await api("/api/admin/overview"); draw(); }
+    catch (e) { if (e.status === 401) { store.sset("eb_admin", null); gate("That token is wrong. Try again."); } else if (e.status === 503) gate(e.message, true); else gate(e.message); }
+  }
+  function gate(msg, disabled) {
+    clearInterval(timer);
+    const input = h("input", { type: "password", id: "tok", placeholder: "Admin token", autocomplete: "current-password", disabled: !!disabled });
+    wrap.replaceChildren(h("div", { style: "max-width:460px;margin:30px auto" },
+      h("h1", { class: "section-title" }, "Dashboard"),
+      h("form", { class: "card", onsubmit: e => { e.preventDefault(); store.sset("eb_admin", input.value.trim()); load(); } },
+        h("p", { class: "sub" }, "This area shows callers' phone numbers, so it's for the owner only."),
+        h("label", { for: "tok" }, "Admin token"), input,
+        msg && h("div", { class: `notice ${disabled ? "" : "bad"}` }, msg),
+        h("div", { style: "margin-top:14px" }, h("button", { class: "btn", disabled: !!disabled }, "Open dashboard")))));
+  }
+  const when = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }); };
+  function csv() {
+    const rows = [["time", "phone", "label", "budget", "product", "count", "timeline", "summary"]].concat(data.leads.map(l => [l.created_at, l.phone, l.classification, l.facts.budget, l.facts.product_type, l.facts.product_count, l.facts.timeline, l.summary]));
+    const text = rows.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const a = h("a", { href: URL.createObjectURL(new Blob([text], { type: "text/csv" })), download: "elevatebox-leads.csv" }); a.click();
+  }
+  async function setCb(id, status) { try { await api(`/api/admin/callbacks/${id}`, { method: "POST", body: JSON.stringify({ status }) }); await load(); } catch (e) { alert(e.message); } }
+
+  function draw() {
+    const s = data.stats, L = s.by_label || {};
+    const leads = data.leads.filter(l => (filter === "All" || (l.classification || "Unclassified") === filter) &&
+      (!q || `${l.phone} ${l.summary} ${JSON.stringify(l.facts)}`.toLowerCase().includes(q.toLowerCase())));
+    const pending = data.callbacks.pending || [];
+    const cbRows = (data.callbacks.pending || []).concat([]);
+    wrap.replaceChildren(
+      h("div", { class: "row", style: "align-items:center;margin-bottom:14px" },
+        h("h1", { class: "section-title", style: "margin:0;flex:1" }, "Dashboard"),
+        h("button", { class: "btn sec sm", onclick: load }, "Refresh"),
+        h("button", { class: "btn sec sm", onclick: csv, disabled: !data.leads.length }, "Export CSV"),
+        h("button", { class: "btn sec sm", onclick: () => { store.sset("eb_admin", null); gate(); } }, "Lock")),
+      h("div", { class: "stats" },
+        [["Total leads", s.leads_total], ["Hot", L.Hot || 0], ["Warm", L.Warm || 0], ["Pending callbacks", pending.length]].map(([t, v]) => h("div", { class: "stat" }, h("b", {}, String(v)), h("span", {}, t)))),
+      h("div", { class: "card" },
+        h("h2", {}, "Leads"),
+        h("div", { class: "filters", role: "group", "aria-label": "Filter leads" },
+          ["All", "Hot", "Warm", "Cold"].map(f => h("button", { "aria-pressed": String(filter === f), onclick: () => { filter = f; draw(); } }, f))),
+        h("input", { type: "search", placeholder: "Search phone, summary or details", value: q, "aria-label": "Search leads", style: "width:100%;margin-bottom:12px", oninput: e => { q = e.target.value; const pos = e.target.selectionStart; draw(); const i = $('input[type=search]'); i.focus(); i.setSelectionRange(pos, pos); } }),
+        leads.length ? h("div", { class: "tablewrap" }, h("table", {},
+          h("thead", {}, h("tr", {}, ["When", "Phone", "Rating", "Budget", "Needs", "WhatsApp"].map(t => h("th", {}, t)))),
+          h("tbody", {}, leads.flatMap(l => {
+            const f = l.facts || {};
+            const rowEl = h("tr", { class: "click", tabindex: "0", "aria-expanded": String(open === l.call_id), onclick: () => { open = open === l.call_id ? null : l.call_id; draw(); }, onkeydown: e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); rowEl.click(); } } },
+              h("td", {}, when(l.created_at)), h("td", {}, l.phone || "unknown"),
+              h("td", {}, h("span", { class: `pill ${l.classification || ""}` }, l.classification || "Unrated")),
+              h("td", {}, f.budget || "–"), h("td", {}, [f.product_count, f.product_type].filter(Boolean).join(" ") || "–"),
+              h("td", {}, l.postcall_whatsapp === "sent" ? h("span", { class: "pill ok" }, "Sent") : l.postcall_whatsapp === "failed" ? h("span", { class: "pill bad" }, "Failed") : l.midcall_whatsapp ? h("span", { class: "pill ok" }, "Mid-call") : h("span", { class: "pill" }, "–")));
+            const out = [rowEl];
+            if (open === l.call_id) out.push(h("tr", { class: "detail" }, h("td", { colspan: "6" }, h("div", { class: "kv" },
+              ...[["Summary", l.summary], ["Timeline", f.timeline], ["Features", f.features], ["Barrier", f.barrier], ["Why this rating", f.reasoning], ["Call id", l.call_id]].flatMap(([k, v]) => [h("b", {}, k), h("span", {}, v || "–")])))));
+            return out;
+          })))) : h("div", { class: "empty" }, data.leads.length ? "No leads match this filter." : "No calls yet. Leads appear here the moment a call is classified.")),
+      h("div", { class: "card" },
+        h("h2", {}, "Callbacks"),
+        cbRows.length ? h("div", { class: "tablewrap" }, h("table", {}, h("thead", {}, h("tr", {}, ["Call at", "Phone", "They said", "Barrier", ""].map(t => h("th", {}, t)))),
+          h("tbody", {}, cbRows.map(c => h("tr", {}, h("td", {}, when(c.parsed_datetime)), h("td", {}, c.caller_phone_number), h("td", {}, c.requested_time_raw), h("td", {}, c.barrier || "–"),
+            h("td", { style: "white-space:nowrap" }, h("button", { class: "btn sm", onclick: () => setCb(c.id, "done") }, "Done"), " ", h("button", { class: "btn sec sm", onclick: () => setCb(c.id, "cancelled") }, "Cancel"))))))) :
+          h("div", { class: "empty" }, "No pending callbacks."),
+        h("p", { class: "sub", style: "margin:10px 0 0" }, `Completed: ${(data.callbacks.done || []).length} · Cancelled: ${(data.callbacks.cancelled || []).length}`)));
+  }
+  if (token()) { wrap.append(h("p", { class: "sub" }, "Loading…")); load(); timer = setInterval(() => { if (!document.hidden) load(); }, 30000); }
+  else gate();
+  wrap.stopTimer = () => clearInterval(timer);
+  return wrap;
+}
+
+/* ---------- Router ---------- */
+let talkView = null; // built once, so switching tabs mid-call keeps the controls and transcript
+const routes = { "/": () => (talkView ||= Talk()), "/call": CallMe, "/how": How, "/status": Status, "/dashboard": Dashboard };
+let current = null;
+function render() {
+  const path = (location.hash.replace(/^#/, "") || "/").split("?")[0];
+  const view = routes[path] || Talk;
+  current?.stopTimer?.();
+  const el = view();
+  current = el;
+  $("#app").replaceChildren(el);
+  document.querySelectorAll("nav.links a").forEach(a => a.dataset.r === path ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current"));
+  $("#nav").classList.remove("open"); $("#menu").setAttribute("aria-expanded", "false");
+  document.title = (path === "/" ? "" : (document.querySelector(`nav a[data-r="${path}"]`)?.textContent + " · ")) + "ElevateBox Voice Agent";
+  window.scrollTo(0, 0);
+}
+addEventListener("hashchange", render);
+render();
 </script>
 </body>
 </html>

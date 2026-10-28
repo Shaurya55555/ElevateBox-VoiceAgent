@@ -134,6 +134,8 @@ def _run_extract_and_classify(call_id: str, caller_number: str, args: dict, stat
     classification = decision_engine.classify(args.get("transcript_so_far", ""))
     state["facts"] = {**state["facts"], **classification}
     log_event("classified", call_id, label=classification.get("classification"))
+    _save_lead(call_id, caller_number, classification=classification.get("classification", ""),
+               facts=classification)
 
     if classification.get("classification") == "Hot" and not state["whatsapp_sent"]:
         body = messages.midcall_message(classification, SHAURYA_PHONE)
@@ -143,11 +145,22 @@ def _run_extract_and_classify(call_id: str, caller_number: str, args: dict, stat
                 messages.template_params_followup(classification, SHAURYA_PHONE),
                 call_id=call_id)
             state["whatsapp_sent"] = True
+            _save_lead(call_id, caller_number, midcall_whatsapp=True)
             log_event("midcall_whatsapp_sent", call_id)
         except Exception as exc:  # noqa: BLE001
             log_event("midcall_whatsapp_failed", call_id, error=str(exc))
             return {**classification, "whatsapp_error": str(exc)}
     return classification
+
+
+def _save_lead(call_id: str, phone: str, **fields) -> None:
+    """Persist what we know about a call. The dashboard must never break a live call."""
+    if call_id == "unknown":
+        return
+    try:
+        scheduler.upsert_lead(call_id, phone, **fields)
+    except Exception as exc:  # noqa: BLE001
+        log_event("lead_save_failed", call_id, error=str(exc))
 
 
 def _run_schedule_callback(call_id: str, caller_number: str, args: dict, state: dict) -> dict:
@@ -185,6 +198,9 @@ async def _handle_end_of_call(message: dict) -> None:
             log_event("fallback_classify_failed", call_id, error=str(exc))
             facts = {}
 
+    _save_lead(call_id, caller_number, classification=facts.get("classification", ""),
+               facts=facts, summary=str(message.get("summary", ""))[:1000])
+
     body = messages.postcall_message(facts, SHAURYA_PHONE)
     try:
         whatsapp.send_text_or_template(
@@ -198,10 +214,12 @@ async def _handle_end_of_call(message: dict) -> None:
             whatsapp.send_image(caller_number, ARCHITECTURE_IMAGE_URL,
                                 "How this system was built", call_id=call_id)
         log_event("postcall_whatsapp_sent", call_id)
+        _save_lead(call_id, caller_number, postcall_whatsapp="sent")
         # Only mark processed on success, so a Vapi retry can try the send again.
         scheduler.save_event(event_key, {"classification": facts.get("classification", "")})
     except Exception as exc:  # noqa: BLE001 - best effort, call already ended
         log_event("postcall_whatsapp_failed", call_id, error=str(exc))
+        _save_lead(call_id, caller_number, postcall_whatsapp="failed")
 
     _call_state.pop(call_id, None)
 
@@ -225,6 +243,37 @@ async def public_config():
         "public_key": os.environ.get("VAPI_PUBLIC_KEY", ""),
         "assistant_id": os.environ.get("VAPI_ASSISTANT_ID", ""),
     }
+
+
+def _check_admin(request: Request) -> None:
+    """Dashboard data holds callers' phone numbers, so it needs ADMIN_TOKEN."""
+    expected = os.environ.get("ADMIN_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Dashboard is disabled: ADMIN_TOKEN is not set.")
+    supplied = request.headers.get("x-admin-token", "")
+    if not hmac.compare_digest(supplied, expected):
+        raise HTTPException(status_code=401, detail="Wrong admin token.")
+
+
+@app.get("/api/admin/overview")
+async def admin_overview(request: Request):
+    _check_admin(request)
+    return {
+        "stats": scheduler.stats(),
+        "leads": scheduler.list_leads(),
+        "callbacks": {s: scheduler.list_callbacks(s) for s in ("pending", "done", "cancelled")},
+    }
+
+
+@app.post("/api/admin/callbacks/{callback_id}")
+async def admin_set_callback(callback_id: int, request: Request):
+    _check_admin(request)
+    status = (await request.json()).get("status")
+    if status not in ("pending", "done", "cancelled"):
+        raise HTTPException(status_code=400, detail="status must be pending, done or cancelled")
+    if not scheduler.set_callback_status(callback_id, status):
+        raise HTTPException(status_code=404, detail="No such callback")
+    return {"id": callback_id, "status": status}
 
 
 _last_call_by_ip: dict[str, float] = {}

@@ -1,4 +1,4 @@
-# ElevateBox voice sales agent
+﻿# ElevateBox voice sales agent
 
 An outbound voice agent built for ElevateBox's (ElevateScale Technologies)
 SDE Intern assignment. It calls a lead, pitches e-commerce website
@@ -17,7 +17,7 @@ Stated as of 2026-10-13. Nothing is claimed that has not been run.
 | Area | Status | Evidence |
 |---|---|---|
 | Backend deployed | Verified | https://elevatebox-voice-agent-zeaa.onrender.com `/health` |
-| Webhook logic (tool calls, end of call, idempotency, secret check) | Verified with simulated payloads | `tests/test_webhooks.py`, 27 tests in `tests/` |
+| Webhook logic (tool calls, end of call, idempotency, secret check) | Verified with simulated payloads | `tests/test_webhooks.py`, 32 tests in `tests/` |
 | WhatsApp client (retry, template fallback) | Verified against a mocked Meta API only | `tests/test_whatsapp.py` |
 | Gemini classification | Verified live on synthetic transcripts | `docs/classification_eval.md` |
 | Prompt behaviour | Text simulation only, not voice | `docs/stress_results_baseline.md`, `docs/prompt_changelog.md` |
@@ -77,7 +77,7 @@ abandoned: `omnidimension_reference/` and `google_twilio_reference/`.
 pip install -r requirements.txt
 cp .env.example .env        # fill in the values, never commit .env
 pip install -r requirements-dev.txt
-pytest                      # 27 tests, no network or keys needed
+pytest                      # 32 tests, no network or keys needed
 uvicorn app:app --port 8000
 python vapi_setup.py        # create/update the assistant, copy the id into .env
 python dispatch_call.py +91XXXXXXXXXX
@@ -102,6 +102,24 @@ Accounts only the owner can create: Exotel KYC and an ExoPhone
   `test_calls/` (artifacts of real calls, empty until a call is made).
 - `tests/`: pytest suite.
 
+## Web app and dashboard
+
+The service serves a single-page app from static/index.html (no build step):
+Talk (browser call with live transcript, mute and timer), Get a call (phone
+form), How it works, Status (live health and an honest verified/not-yet
+table) and an owner Dashboard.
+
+The Dashboard (#/dashboard) lists every call as a lead with its Hot, Warm or
+Cold rating, extracted facts, summary and WhatsApp status, plus booked
+callbacks that can be marked done or cancelled, with search, filters and CSV
+export. It shows callers' phone numbers, so it is off until `ADMIN_TOKEN` is
+set, and every request needs it in the `X-Admin-Token` header. Leads are
+saved by the webhook (`scheduler.upsert_lead`) and a failure to save never
+breaks a live call.
+
+To turn the demo on for a deployment, set `VAPI_PUBLIC_KEY` (browser calls),
+`ADMIN_TOKEN` (dashboard) and, once a number exists, `VAPI_PHONE_NUMBER_ID`
+plus `ENABLE_PHONE_CALLS=1`.
 ## Known limitations
 
 - No real call or real WhatsApp delivery has happened yet (see status table).

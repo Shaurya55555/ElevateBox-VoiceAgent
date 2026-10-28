@@ -67,6 +67,18 @@ def init_db() -> None:
                 result TEXT,
                 created_at TEXT NOT NULL
             )""")
+        _execute(conn, """
+            CREATE TABLE IF NOT EXISTS leads (
+                call_id TEXT PRIMARY KEY,
+                phone TEXT,
+                classification TEXT,
+                facts TEXT,
+                summary TEXT,
+                midcall_whatsapp INTEGER NOT NULL DEFAULT 0,
+                postcall_whatsapp TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""")
 
 
 def _now() -> str:
@@ -98,6 +110,69 @@ def list_callbacks(status: str = "pending") -> list[dict]:
                        "WHERE status = ? ORDER BY parsed_datetime ASC", (status,))
         cols = [c[0] for c in cur.description]
         return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def set_callback_status(callback_id: int, status: str) -> bool:
+    with _conn() as conn:
+        cur = _execute(conn, "UPDATE callbacks SET status = ? WHERE id = ?",
+                       (status, callback_id))
+        return cur.rowcount > 0
+
+
+def upsert_lead(call_id: str, phone: str = "", classification: str = "",
+                facts: dict | None = None, summary: str = "",
+                midcall_whatsapp: bool | None = None,
+                postcall_whatsapp: str | None = None) -> None:
+    """Create or update the lead for a call. Fields left as None/empty keep
+    their stored value, so the mid-call and end-of-call writes merge."""
+    now = _now()
+    with _conn() as conn:
+        cur = _execute(conn, "SELECT facts FROM leads WHERE call_id = ?", (call_id,))
+        row = cur.fetchone()
+        if row is None:
+            _execute(conn, """
+                INSERT INTO leads (call_id, phone, classification, facts, summary,
+                    midcall_whatsapp, postcall_whatsapp, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (call_id, phone, classification, json.dumps(facts or {}), summary,
+                 1 if midcall_whatsapp else 0, postcall_whatsapp or "", now, now))
+            return
+        merged = {**(json.loads(row[0]) if row[0] else {}), **(facts or {})}
+        _execute(conn, """
+            UPDATE leads SET
+                phone = CASE WHEN ? <> '' THEN ? ELSE phone END,
+                classification = CASE WHEN ? <> '' THEN ? ELSE classification END,
+                facts = ?,
+                summary = CASE WHEN ? <> '' THEN ? ELSE summary END,
+                midcall_whatsapp = CASE WHEN ? = 1 THEN 1 ELSE midcall_whatsapp END,
+                postcall_whatsapp = CASE WHEN ? <> '' THEN ? ELSE postcall_whatsapp END,
+                updated_at = ?
+            WHERE call_id = ?""",
+            (phone, phone, classification, classification, json.dumps(merged),
+             summary, summary, 1 if midcall_whatsapp else 0,
+             postcall_whatsapp or "", postcall_whatsapp or "", now, call_id))
+
+
+def list_leads(limit: int = 200) -> list[dict]:
+    with _conn() as conn:
+        cur = _execute(conn, "SELECT call_id, phone, classification, facts, summary, "
+                       "midcall_whatsapp, postcall_whatsapp, created_at, updated_at "
+                       "FROM leads ORDER BY created_at DESC LIMIT ?", (limit,))
+        cols = [c[0] for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+    for r in rows:
+        r["facts"] = json.loads(r["facts"]) if r["facts"] else {}
+        r["midcall_whatsapp"] = bool(r["midcall_whatsapp"])
+    return rows
+
+
+def stats() -> dict:
+    with _conn() as conn:
+        cur = _execute(conn, "SELECT classification, COUNT(*) FROM leads GROUP BY classification")
+        by_label = {(k or "Unclassified"): v for k, v in cur.fetchall()}
+        cur = _execute(conn, "SELECT status, COUNT(*) FROM callbacks GROUP BY status")
+        cb = dict(cur.fetchall())
+    return {"leads_total": sum(by_label.values()), "by_label": by_label, "callbacks": cb}
 
 
 def get_event(event_key: str) -> dict | None:
